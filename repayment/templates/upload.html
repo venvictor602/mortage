@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload AKPAB File</title>
+</head>
+<body>
+    <h1>Upload AKPAB File and Select Month <a href="{% url 'download-template' %}">Download Our Template</a></h1>
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>
