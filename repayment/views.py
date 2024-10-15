@@ -11,13 +11,12 @@ TEMPLATE_FILE_PATH = 'repayment/files/our template.xlsx'
 
 def process_repayment(request):
     if request.method == 'POST':
-        # Manually retrieve form data
+        # Retrieve form data
         selected_month = request.POST.get('month')
         selected_year = request.POST.get('year')
         akpab_file = request.FILES.get('akpab_file')
 
         if not selected_month or not selected_year or not akpab_file:
-            # Return an error message if fields are missing
             return HttpResponse("Please fill in all fields and upload the required file.", status=400)
 
         # Get the last two digits of the year
@@ -28,16 +27,15 @@ def process_repayment(request):
             akpab_wb = openpyxl.load_workbook(akpab_file)
             akpab_ws = akpab_wb.active
 
-            # Load our template workbook
+            # Load the template workbook
             template_wb = openpyxl.load_workbook(TEMPLATE_FILE_PATH)
             template_ws = template_wb.active
 
-            # AKPAB file headers
+            # Define AKPAB column indices
             akpab_employee_number_col = 3  # EMPLOYMENT NUMBER is in column 3
-            akpab_employee_name_col = 5    # EMPLOYEE NAME is in column 5
-            akpab_amount_col = 6           # AMOUNT is in column 6
+            akpab_amount_col = 6            # AMOUNT is in column 6
 
-            # Find "TOTAL" column in the template and insert new month/year column before it
+            # Find "TOTAL" column in the template
             total_column = None
             header_row = 3  # Assuming the template headers are in row 3
 
@@ -47,27 +45,31 @@ def process_repayment(request):
                     total_column = col
                     break
 
-            if total_column:
-                # Create a new header combining the month and last two digits of the year
-                new_month_year_column_name = f"{selected_month} {last_two_digits_year}"
+            if total_column is None:
+                return HttpResponse("Error: 'TOTAL' column not found in the template.", status=500)
 
-                # Insert the new column before the "TOTAL" column
-                template_ws.insert_cols(total_column)
-                template_ws.cell(row=header_row, column=total_column, value=new_month_year_column_name)
+            # Create a new header for the current month/year before the "TOTAL" column
+            new_month_year_column_name = f"{selected_month} {last_two_digits_year}"
+            template_ws.insert_cols(total_column)  # Insert new column before the "TOTAL"
+            template_ws.cell(row=header_row, column=total_column, value=new_month_year_column_name)
 
-                # Map rows from AKPAB to the template based on employee number and name
-                for akpab_row in akpab_ws.iter_rows(min_row=4):  # AKPAB starts from row 4
-                    akpab_employee_number = akpab_row[akpab_employee_number_col - 1].value
-                    akpab_employee_name = akpab_row[akpab_employee_name_col - 1].value
-                    akpab_amount = akpab_row[akpab_amount_col - 1].value
+            # Map rows from AKPAB to the template based on employee number
+            for akpab_row in akpab_ws.iter_rows(min_row=4):  # Start processing from row 4
+                akpab_employee_number = akpab_row[akpab_employee_number_col - 1].value
+                akpab_amount = akpab_row[akpab_amount_col - 1].value
 
-                    if akpab_employee_number and akpab_employee_name:
-                        # Loop through template rows to match the employee
-                        for template_row in range(3, template_ws.max_row + 1):
+                # Check if the EMPLOYEE NUMBER is numeric
+                if akpab_employee_number is not None and str(akpab_employee_number).strip().isdigit():
+                    akpab_employee_number = int(akpab_employee_number)  # Convert to integer
+
+                    # Proceed only if the amount is numeric
+                    if akpab_amount is not None and isinstance(akpab_amount, (int, float)):
+                        # Loop through template rows to match the employee number
+                        for template_row in range(4, template_ws.max_row + 1):  # Start from row 4
                             template_employee_number = template_ws.cell(row=template_row, column=3).value  # EMP_CODE
-                            template_employee_name = template_ws.cell(row=template_row, column=4).value    # EMP_NAME
 
-                            if template_employee_number == akpab_employee_number and template_employee_name == akpab_employee_name:
+                            # Match employee number from AKPAB with EMP_CODE in the template
+                            if template_employee_number == akpab_employee_number:
                                 # Add the amount in the new month/year column
                                 template_ws.cell(row=template_row, column=total_column, value=akpab_amount)
 
@@ -75,8 +77,12 @@ def process_repayment(request):
                                 total_cell = template_ws.cell(row=template_row, column=total_column + 1)
                                 total_cell.value = (total_cell.value or 0) + akpab_amount
                                 break
+                    else:
+                        print(f"Skipping row {akpab_row[0].row}: Non-numeric amount '{akpab_amount}'.")
+                else:
+                    print(f"Skipping row {akpab_row[0].row}: Non-numeric employee number '{akpab_employee_number}'.")
 
-            # Overwrite and save the modified template to the same file
+            # Save the modified template
             template_wb.save(TEMPLATE_FILE_PATH)
 
             # Prepare the filename using the selected month and last two digits of the year
@@ -95,13 +101,16 @@ def process_repayment(request):
     return render(request, 'index.html')
 
 
+
+
+
 from django.http import FileResponse, HttpResponse
 import os
 from django.conf import settings
 
 def download_template(request):
     # Define the template file path
-    TEMPLATE_FILE_PATH = os.path.join(settings.BASE_DIR, 'repayment', 'files', 'our_template.xlsx')
+    # TEMPLATE_FILE_PATH = os.path.join(settings.BASE_DIR, 'repayment', 'files', 'our_template.xlsx')
 
     # Log the path for debugging
     print("Looking for template file at:", TEMPLATE_FILE_PATH)
