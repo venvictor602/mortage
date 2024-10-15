@@ -1,24 +1,29 @@
+
+
 import openpyxl
 from django.shortcuts import render
-from .forms import RepaymentForm
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse
 import os
 from django.conf import settings
 
 # Path to the template file
-TEMPLATE_FILE_PATH = os.path.join(settings.BASE_DIR, 'repayment', 'files', 'our_template.xlsx')
+TEMPLATE_FILE_PATH = 'repayment/files/our template.xlsx'
 
 def process_repayment(request):
     if request.method == 'POST':
-        form = RepaymentForm(request.POST, request.FILES)
-        if form.is_valid():
-            akpab_file = request.FILES['akpab_file']
-            selected_month = form.cleaned_data['month']
-            selected_year = form.cleaned_data['year']  # Get the year from the form
+        # Manually retrieve form data
+        selected_month = request.POST.get('month')
+        selected_year = request.POST.get('year')
+        akpab_file = request.FILES.get('akpab_file')
 
-            # Get the last two digits of the year
-            last_two_digits_year = str(selected_year)[-2:]
+        if not selected_month or not selected_year or not akpab_file:
+            # Return an error message if fields are missing
+            return HttpResponse("Please fill in all fields and upload the required file.", status=400)
 
+        # Get the last two digits of the year
+        last_two_digits_year = str(selected_year)[-2:]
+
+        try:
             # Load AKPAB workbook
             akpab_wb = openpyxl.load_workbook(akpab_file)
             akpab_ws = akpab_wb.active
@@ -83,11 +88,11 @@ def process_repayment(request):
                 response['Content-Disposition'] = f'attachment; filename={downloaded_filename}'
                 return response
 
-    else:
-        form = RepaymentForm()
+        except Exception as e:
+            return HttpResponse(f"Error processing the file: {str(e)}", status=500)
 
-    return render(request, 'upload.html', {'form': form})
-
+    # If it's a GET request, render your custom HTML form
+    return render(request, 'index.html')
 
 
 from django.http import FileResponse, HttpResponse
